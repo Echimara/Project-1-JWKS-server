@@ -10,90 +10,41 @@
 # Description: 
  '''add later'''
 
-import flask 
-from flask import Flask, request
-from flask import jsonify
+import flask
+from flask import Flask, request, jsonify
 import time
-import os
-import jwk
-# key gen libs
-import cryptography.hazmat
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+import rsa
+import jwt
 
-app = Flask(_name_) # create flask object
+app = Flask(__name__)  # Create a Flask object
 
-# KEY GENERATION - req1
+# Key Generation - req1
 # Generate an RSA key pair
-private_key = rsa.generate_private_key(
-    public_exponent=65537,  
-    key_size=2048,          
-    backend=default_backend()
-)
+private_key, public_key = rsa.newkeys(2048)
 
-# ASSOCIATE A KEY ID (KID) AND EXPIRY TIMESTAMP WITH EACH KEY - req2
+# Associate a Key ID (KID) and expiry timestamp with each key - req2
 key_id = "kid_1"
 # Get time by epoch
 curr_time = int(time.time())
-#  expiry timestamp -: 2hrs
+# Expiry timestamp: 2 hours
 key_expiry = curr_time + 7200
 
-# store keys
-key_entry = {
-    "key_id": key_id,
-    "public_key": public_key,
-    "key_expiry": key_expiry
+# Store keys
+keys = {
+    key_id: {
+        "private_key": private_key,
+        "public_key": public_key,
+        "key_expiry": key_expiry
+    }
 }
-keys = [key_entry]
-
-# SERVE HTTP ON PORT 8080 - req3
-if _name_ == '_main_':
-    app.run(host='0.0.0.0', port=8080)
-
 
 # RESTful JWKS endpoint - req4
 @app.route('/jwks', methods=['GET'])
 def jwks():
     current_time = int(time.time())
-    if key_expiry <= current_time:
-        key_expiry = current_time
-    jwks = {
-        "keys": [
-            {
-                "kid": key_id,
-                "kty": "RSA",
-                "alg": "RS256",
-                "use": "sig",
-                "n": public_key.public_numbers().n,
-                "e": public_key.public_numbers().e,
-                "exp": key_expiry,
-            }
-        ]
-    }
-    return jsonify(jwks)
+    if keys[key_id]["key_expiry"] <= current_time:
+        keys[key_id]["key_expiry"] = current_time
 
-# /auth endpoint definition with HTTP method - req5
-@app.route('/auth', methods=['POST'])
-def auth():
-    # GET expired query parameter from the request
-    expired_param = request.args.get('expired')
-
-    # Parameter validation
-    if expired_param:
-        # If param is expired, generate a JWT using the expired key and expiry
-        token = generate_jwt(private_key, key_id, expired=True)
-    else:
-        # generate a JWT using the current key and expiry
-        token = generate_jwt(private_key, key_id)
-
- #  Return an unexpired, signed JWT on the POST request
- return jsonify({"access_token": token})
-
-# /jwks endpoint to serve JWKS keys
-@app.route('/jwks', methods=['GET'])
-def jwks():
-    current_time = int(time.time())
     jwks = {
         "keys": [
             {
@@ -109,18 +60,39 @@ def jwks():
     }
     return jsonify(jwks)
 
-# /auth endpoint to issue JWTs
+# JWT Generation - Include this function in your code
+def generate_jwt(private_key, key_id, expired=False):
+    payload = {"sub": "userABC"}  # Add more claims as needed
+
+    # Set the key to be used for signing (expired or current)
+    key = keys[key_id]["private_key"]
+    
+    if expired:
+        key = expired_private_key  # Implement expired_private_key (if needed)
+        
+    token = jwt.encode(payload, key, algorithm="RS256")
+    return token
+
+# /auth endpoint definition with HTTP method - req5
 @app.route('/auth', methods=['POST'])
 def auth():
+    # GET expired query parameter from the request
     expired_param = request.args.get('expired')
-    token = generate_jwt(private_key, key_id, expired_param)
 
+    # Parameter validation
+    if expired_param:
+        # If param is expired, generate a JWT using the expired key and expiry
+        token = generate_jwt(private_key, key_id, expired=True)
+    else:
+        # Generate a JWT using the current key and expiry
+        token = generate_jwt(private_key, key_id)
+
+    # Return an unexpired, signed JWT on the POST request
     return jsonify({"access_token": token})
 
 # Run the Flask app
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
-
 
 
 
