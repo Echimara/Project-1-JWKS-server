@@ -73,7 +73,7 @@ def jwks():
     }
     return jsonify(jwks)
 
-# /auth endpoint defintion with HTTP method - req5
+# /auth endpoint definition with HTTP method - req5
 @app.route('/auth', methods=['POST'])
 def auth():
     # GET expired query parameter from the request
@@ -89,6 +89,38 @@ def auth():
 
  #  Return an unexpired, signed JWT on the POST request
  return jsonify({"access_token": token})
+
+# /jwks endpoint to serve JWKS keys
+@app.route('/jwks', methods=['GET'])
+def jwks():
+    current_time = int(time.time())
+    jwks = {
+        "keys": [
+            {
+                "kid": key_id,
+                "kty": "RSA",
+                "alg": "RS256",
+                "use": "sig",
+                "n": keys[key_id]["public_key"].n,
+                "e": keys[key_id]["public_key"].e,
+                "exp": keys[key_id]["key_expiry"],
+            }
+        ]
+    }
+    return jsonify(jwks)
+
+# /auth endpoint to issue JWTs
+@app.route('/auth', methods=['POST'])
+def auth():
+    expired_param = request.args.get('expired')
+    token = generate_jwt(private_key, key_id, expired_param)
+
+    return jsonify({"access_token": token})
+
+# Run the Flask app
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8080)
+
 
 
 
