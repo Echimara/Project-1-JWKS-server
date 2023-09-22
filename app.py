@@ -19,35 +19,29 @@ import jwt
 app = Flask(__name__)  # Create a Flask object
 
 # Key Generation - req1
-# Generate an RSA key pair
-private_key, public_key = rsa.newkeys(2048)
-
-# Associate a Key ID (KID) and expiry timestamp with each key - req2
-key_id = "kid_1"
-# Get time by epoch
-curr_time = int(time.time())
-# Expiry timestamp: 2 hours
-key_expiry = curr_time + 7200
-
-# Store keys
-keys = {
-    key_id: {
+# Generate multiple RSA key pairs with unique IDs and expiry timestamps
+keys = {}
+for i in range(3):
+    private_key, public_key = rsa.newkeys(2048)
+    key_id = "kid_" + str(i)
+    curr_time = int(time.time())
+    key_expiry = curr_time + 7200
+    keys[key_id] = {
         "private_key": private_key,
         "public_key": public_key,
         "key_expiry": key_expiry
     }
-}
 
 # RESTful JWKS endpoint - req4
 @app.route('/jwks', methods=['GET'])
 def jwks():
     current_time = int(time.time())
-    if keys[key_id]["key_expiry"] <= current_time:
-        keys[key_id]["key_expiry"] = current_time
-
     jwks = {
-        "keys": [
-            {
+        "keys": []
+    }
+    for key_id in keys:
+        if keys[key_id]["key_expiry"] > current_time:
+            jwks["keys"].append({
                 "kid": key_id,
                 "kty": "RSA",
                 "alg": "RS256",
@@ -55,9 +49,7 @@ def jwks():
                 "n": keys[key_id]["public_key"].n,
                 "e": keys[key_id]["public_key"].e,
                 "exp": keys[key_id]["key_expiry"],
-            }
-        ]
-    }
+            })
     return jsonify(jwks)
 
 # JWT Generation - Include this function in your code
@@ -68,9 +60,9 @@ def generate_jwt(private_key, key_id, expired=False):
     key = keys[key_id]["private_key"]
     
     if expired:
-        key = expired_private_key  # Implement expired_private_key (if needed)
+        key = keys[key_id]["expired_private_key"]  # Implement expired_private_key (if needed)
         
-    token = jwt.encode(payload, key, algorithm="RS256")
+    token = jwt.encode(payload, key, algorithm="RS256", headers={"kid": key_id})
     return token
 
 # /auth endpoint definition with HTTP method - req5
@@ -82,10 +74,18 @@ def auth():
     # Parameter validation
     if expired_param:
         # If param is expired, generate a JWT using the expired key and expiry
-        token = generate_jwt(private_key, key_id, expired=True)
+        for key_id in keys:
+            if keys[key_id]["key_expiry"] <= int(time.time()):
+                expired_private_key = keys[key_id]["private_key"]
+                break
+        token = generate_jwt(expired_private_key, key_id, expired=True)
     else:
         # Generate a JWT using the current key and expiry
-        token = generate_jwt(private_key, key_id)
+        for key_id in keys:
+            if keys[key_id]["key_expiry"] > int(time.time()):
+                current_private_key = keys[key_id]["private_key"]
+                break
+        token = generate_jwt(current_private_key, key_id)
 
     # Return an unexpired, signed JWT on the POST request
     return jsonify({"access_token": token})
@@ -93,6 +93,3 @@ def auth():
 # Run the Flask app
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8080)
-
-
-
