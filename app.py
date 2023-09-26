@@ -2,13 +2,19 @@
 # Date: 9/19/2023
 # Class: CSCE3550.001
 
-# Usage: 
+# Usage:
 '''
 ---From Terminal---
-1. pip install cryptography
-'''    
-# Description: 
- '''add later'''
+1. pip install flask
+2. pip install cryptography
+3. pip install pyjwt
+'''
+
+# Description:
+'''
+This code implements a simple Flask application that generates RSA key pairs with unique IDs and expiry timestamps.
+It provides a RESTful JWKS endpoint to serve public keys in JWKS format and an /auth endpoint to issue JWTs.
+'''
 
 import flask
 from flask import Flask, request, jsonify
@@ -52,7 +58,7 @@ def jwks():
             })
     return jsonify(jwks)
 
-# JWT Generation - Include this function in your code
+# JWT Generation
 def generate_jwt(private_key, key_id, expired=False):
     payload = {"sub": "userABC"}  # Add more claims as needed
 
